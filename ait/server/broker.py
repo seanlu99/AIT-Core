@@ -7,7 +7,7 @@ from importlib import import_module
 import ait.core
 import ait.server
 from ait.core import cfg, log
-from stream import Stream
+from stream import Stream, InputPortStream
 
 
 class AitBroker(gevent.Greenlet):
@@ -25,9 +25,13 @@ class AitBroker(gevent.Greenlet):
         self.XPUB_URL = ait.config.get('server.xpub',
                                         ait.server.DEFAULT_XPUB_URL)
 
+        log.info("streams")
         self.load_streams()
-        self.load_plugins()
+        # log.info("plugins")
+        # self.load_plugins()
+        log.info("proxy")
         self.setup_proxy()
+        log.info("sub all")
         self.subscribe_all()
 
         gevent.Greenlet.__init__(self)
@@ -35,14 +39,17 @@ class AitBroker(gevent.Greenlet):
     def _run(self):
         log.info("Starting proxy...")
         while True:
-            log.info('Polling...')
+            log.info('top prox loop...')
             gevent.sleep(0)
+            log.info('Polling...')
             socks = dict(self.poller.poll())
 
+            log.info('here in broker')
             if socks.get(self.frontend) == zmq.POLLIN:
                 message = self.frontend.recv_multipart()
                 self.backend.send_multipart(message)
 
+            log.info('there in broker')
             if socks.get(self.backend) == zmq.POLLIN:
                 message = self.backend.recv_multipart()
                 self.frontend.send_multipart(message)
@@ -74,6 +81,8 @@ class AitBroker(gevent.Greenlet):
             else:
                 for index, s in enumerate(streams):
                     try:
+                        print 'handling stream'
+                        print s
                         strm = self.create_stream(s['stream'], stream_type)
                         if stream_type == 'inbound':
                             self.inbound_streams.append(strm)
@@ -124,7 +133,7 @@ class AitBroker(gevent.Greenlet):
             raise(cfg.AitConfigMissing(stream_type + ' stream input'))
 
         stream_handlers = [ ]
-        if config['handlers']:
+        if 'handlers' in config:
             for handler in config['handlers']:
                 hndlr = self.create_handler(handler)
                 stream_handlers.append(hndlr)
@@ -134,12 +143,24 @@ class AitBroker(gevent.Greenlet):
             log.warn('No handlers specified for {} stream {}'.format(stream_type,
                                                                      name))
 
-        return Stream(name,
-                      stream_input,
-                      stream_handlers,
-                      zmq_args={'context': self.context,
-                                'XSUB_URL': self.XSUB_URL,
-                                'XPUB_URL': self.XPUB_URL})
+        try:
+            input_port = int(stream_input)
+            return InputPortStream(
+                input_port,
+                name,
+                stream_input,
+                stream_handlers,
+                zmq_args={'context': self.context,
+                          'XSUB_URL': self.XSUB_URL,
+                          'XPUB_URL': self.XPUB_URL}
+            )
+        except ValueError:
+            return Stream(name,
+                          stream_input,
+                          stream_handlers,
+                          zmq_args={'context': self.context,
+                                    'XSUB_URL': self.XSUB_URL,
+                                    'XPUB_URL': self.XPUB_URL})
 
     def create_handler(self, config):
         """
@@ -177,8 +198,12 @@ class AitBroker(gevent.Greenlet):
                 self.subscribe(plugin, input_)
 
     def subscribe(self, subscriber, publisher):
-        subscriber.sub.setsockopt(zmq.SUBSCRIBE, str(publisher))
-        log.info('Subscribed {} to topic {}'.format(subscriber, publisher))
+        
+        if type(subscriber) != InputPortStream:
+            subscriber.sub.setsockopt(zmq.SUBSCRIBE, str(publisher))
+            log.info('Subscribed {} to topic {}'.format(subscriber, publisher))
+        else:
+            log.info('Skipped subscribing InputPortStream input socket')
 
     def get_stream(self, name):
         return next((strm

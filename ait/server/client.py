@@ -29,11 +29,14 @@ class Client(gevent.Greenlet):
             log.info('{} {} open to recieving messages'.format(self.type,
                                                                self.name))
             while True:
+                log.info('top of Client loop')
                 gevent.sleep(0)
+                log.info('Client socket read')
                 string = self.sub.recv()
                 topic, messagedata = string.split()
                 log.info('%s %s recieved message \"%s\" from %s'
                          % (self.type, self.name, messagedata, topic))
+                log.info('received data in Client, passing to process')
                 self.process(messagedata, topic=topic)
 
         except Exception as e:

@@ -32,8 +32,8 @@ class AitServer(object):
             print(greenlet)
             greenlet.start()
 
+        print("joining greenlets")
         gevent.joinall(self.greenlets)
-        print("joined greenlets")
 
 
 def main():
