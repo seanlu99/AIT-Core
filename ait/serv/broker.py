@@ -1,13 +1,15 @@
-import sys
-import zmq.green as zmq
 import gevent
 import gevent.monkey; gevent.monkey.patch_all()
+
+import sys
 from importlib import import_module
 
 import ait.core
-import ait.server
+import ait.serv
 from ait.core import cfg, log
 from stream import Stream, InputPortStream
+
+import zmq.green as zmq
 
 
 class AitBroker(gevent.Greenlet):
@@ -15,15 +17,16 @@ class AitBroker(gevent.Greenlet):
     def __init__(self):
 
         self.inbound_streams = [ ]
+        self.servers = [ ]
         self.outbound_streams = [ ]
         self.ports = [ ]
         self.plugins = [ ]
 
         self.context = zmq.Context()
-        self.XSUB_URL = ait.config.get('server.xsub',
-                                        ait.server.DEFAULT_XSUB_URL)
-        self.XPUB_URL = ait.config.get('server.xpub',
-                                        ait.server.DEFAULT_XPUB_URL)
+        self.XSUB_URL = ait.config.get('serv.xsub',
+                                        ait.serv.DEFAULT_XSUB_URL)
+        self.XPUB_URL = ait.config.get('serv.xpub',
+                                        ait.serv.DEFAULT_XPUB_URL)
 
         log.info("streams")
         self.load_streams()
@@ -84,7 +87,10 @@ class AitBroker(gevent.Greenlet):
                         print 'handling stream'
                         print s
                         strm = self.create_stream(s['stream'], stream_type)
-                        if stream_type == 'inbound':
+                        if stream_type == 'inbound' and type(strm) == InputPortStream:
+                            strm.start()
+                            self.servers.append(strm)
+                        elif stream_type == 'inbound':
                             self.inbound_streams.append(strm)
                         elif stream_type == 'outbound':
                             self.outbound_streams.append(strm)
@@ -183,7 +189,7 @@ class AitBroker(gevent.Greenlet):
 
         # try to create handler
         class_name = handler_name.title().replace('_', '')
-        module = import_module('ait.server.handlers.{}'.format(handler_name))
+        module = import_module('ait.serv.handlers.{}'.format(handler_name))
         handler_class = getattr(module, class_name)
         instance = handler_class(input_type, output_type)
 
@@ -260,7 +266,7 @@ class AitBroker(gevent.Greenlet):
             plugin_inputs = [ ]
 
         # try to create plugin
-        module = import_module('ait.server.plugins.{}'.format(name))
+        module = import_module('ait.serv.plugins.{}'.format(name))
         plugin_class = getattr(module, class_name)
         instance = plugin_class(plugin_inputs,
                                 zmq_args={'context': self.context,

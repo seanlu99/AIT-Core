@@ -68,6 +68,7 @@ class InputPortStream(gs.DatagramServer):
         self.name = name
         self.input_ = input_
         self.handlers = handlers
+        self.type = 'inbound'
 
         # if not self.valid_workflow():
             # raise ValueError('Sequential workflow inputs and outputs ' +
@@ -91,11 +92,11 @@ class InputPortStream(gs.DatagramServer):
         super(InputPortStream, self).start()
 
     def handle (self, packet, address):
-        topic, messagedata = packet.split()
-        log.info('%s %s recieved message \"%s\" from %s'
-                 % (self.type, self.name, messagedata, topic))
+        # topic, messagedata = packet.split()
+        # log.info('%s %s recieved message \"%s\" from %s'
+                 # % (self.type, self.name, messagedata, topic))
         log.info('received data in Client, passing to process')
-        self.process(messagedata, topic=topic)
+        self.process(packet)
 
     def publish(self, msg):
         """
